@@ -33,9 +33,12 @@ def generate_analysis(
         )
         trend_line = f"\nPrice trend over the analysis window (% change): {trend_desc}"
 
-    prompt = f"""A trader wants one direct question answered about {target_ticker} ({sector}):
-if {target_ticker} moves, is there a real relationship with the rest of this
-group, and what's the likely pattern? Yes/no, then explain briefly.
+    prompt = f"""A trader wants two direct questions answered about {target_ticker} ({sector}):
+
+1. If {target_ticker} moves, is there a real relationship with the rest of
+   this group — yes/no, and what's the likely pattern?
+2. {dominant_ticker} is the "dominant driver" — what does that actually
+   mean here, and what's the practical implication for a trader?
 
 Moves with {target_ticker} (positively correlated): {', '.join(moves_with) or 'none'}
 Moves against {target_ticker} (negatively correlated): {', '.join(moves_against) or 'none'}
@@ -43,13 +46,17 @@ No reliable relationship: {', '.join(no_relationship) or 'none'}
 Dominant driver of the group's shared movement: {dominant_ticker}
 Top factor explains {explained_pct_top:.1f}% of the group's shared variance.{trend_line}
 
-Write at most 80 words. Start with a direct yes/no answer. State plainly
-whether {target_ticker} can be used as a signal for the rest of the group
-(or vice versa), or whether it's decoupled and should be traded on its own.
-No analyst jargon, no dispersion/bellwether language, no disclaimers,
-no compliance boilerplate — just the direct answer."""
+Write at most 110 words. Start with a direct yes/no answer on {target_ticker}'s
+relationship to the group. Then explain plainly what it means that
+{dominant_ticker} is the dominant driver — it's the stock whose returns best
+represent the single biggest shared factor moving this group, i.e. the one
+whose moves other members are most likely tied to. State the implication:
+is {dominant_ticker} the one to watch for the earliest/clearest read on this
+group's shared move, and does {target_ticker} lead or lag it? No analyst
+jargon, no dispersion/bellwether language, no disclaimers, no compliance
+boilerplate — just the direct answer."""
 
     try:
-        return call_openrouter(prompt, max_tokens=180)
+        return call_openrouter(prompt, max_tokens=320)
     except Exception as e:
         return f"⚠️ AI analysis unavailable ({e}). The relationship table above is unaffected."
