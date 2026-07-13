@@ -15,7 +15,12 @@ from core.data_fetcher import (
     validate_and_rank_candidates,
 )
 from core.ai_discovery import identify_sectors, propose_sector_stocks
-from core.pca_engine import run_pca, signal_strength_label, correlation_structure_label
+from core.pca_engine import (
+    run_pca,
+    signal_strength_label,
+    correlation_structure_label,
+    relationship_table,
+)
 from core.ai_analyst import generate_analysis
 
 st.set_page_config(page_title="Sector Eigen-Correlation Explorer", layout="wide", page_icon="📊")
@@ -55,9 +60,8 @@ st.markdown(
 
 st.title("📊 Sector Eigen-Correlation Explorer")
 st.caption(
-    "Pick a stock → AI identifies the sectors/themes it belongs to → AI proposes "
-    "peer stocks, ranked by live market cap → run PCA/eigen-decomposition on returns → "
-    "an AI analyst summarizes it."
+    "Pick a stock → AI finds its sector peers → the question this answers: "
+    "if this stock moves, does the rest of the group move with it — yes or no?"
 )
 
 with st.sidebar:
@@ -151,6 +155,14 @@ if run_button and ticker_input:
 
     trend_stats = ((prices.iloc[-1] / prices.iloc[0] - 1) * 100).to_dict()
 
+    st.subheader(f"🔗 Does the rest of the group move with {ticker_input}?")
+    rel_df = relationship_table(result.correlation_matrix, ticker_input)
+    st.dataframe(rel_df, hide_index=True, use_container_width=True)
+
+    moves_with = rel_df.loc[rel_df["Likely movement"] == "Moves with it", "Ticker"].tolist()
+    moves_against = rel_df.loc[rel_df["Likely movement"] == "Moves against it", "Ticker"].tolist()
+    no_relationship = rel_df.loc[rel_df["Likely movement"] == "No reliable relationship", "Ticker"].tolist()
+
     col1, col2 = st.columns([2, 1])
 
     with col1:
@@ -195,19 +207,16 @@ if run_button and ticker_input:
         }).sort_values("Loading", ascending=False)
         st.dataframe(loadings_df, hide_index=True, use_container_width=True)
 
-    st.subheader("🧠 AI Analyst Summary")
-    with st.spinner("Generating AI analysis..."):
-        cap_breakdown = {tier: [t for t, c in cap_tiers.items() if c == tier]
-                          for tier in set(cap_tiers.values())}
+    st.subheader("🧠 AI Explanation")
+    with st.spinner("Generating AI explanation..."):
         writeup = generate_analysis(
             target_ticker=ticker_input,
             sector=sector,
-            peers=list(prices.columns),
+            moves_with=moves_with,
+            moves_against=moves_against,
+            no_relationship=no_relationship,
             dominant_ticker=result.dominant_ticker,
             explained_pct_top=result.explained_variance_pct[0],
-            correlation_label=correlation_structure_label(result.eigenvalues),
-            signal_label=signal_strength_label(result.explained_variance_pct[0]),
-            cap_breakdown=cap_breakdown,
             trend_stats=trend_stats,
         )
     st.write(writeup)

@@ -79,3 +79,36 @@ def correlation_structure_label(eigvals: np.ndarray) -> str:
     if np.isclose(eigvals[0], eigvals[1], rtol=0.2):
         return "Stocks are relatively uncorrelated — each moves on its own drivers."
     return "One strong factor dominates, with secondary independent movement beneath it."
+
+
+RELATIONSHIP_THRESHOLD = 0.5  # |correlation| at/above this counts as a real relationship
+
+
+def relationship_table(correlation_matrix: pd.DataFrame, target: str) -> pd.DataFrame:
+    """
+    Direct, deterministic answer to "if `target` moves, what does each peer
+    likely do" — no AI involved, just each peer's historical correlation
+    with the target turned into a plain Yes/No + direction call. This is
+    the actual data behind any AI commentary, not a substitute for it.
+    """
+    corrs = correlation_matrix[target].drop(target)
+
+    rows = []
+    for ticker, corr in corrs.items():
+        # Round first, then classify off the rounded value — otherwise a
+        # correlation like 0.4988 displays as "0.5" but fails a >= 0.5
+        # check, showing a contradictory "0.5 / No" row.
+        corr = round(float(corr), 2)
+        has_relationship = abs(corr) >= RELATIONSHIP_THRESHOLD
+        if has_relationship:
+            movement = "Moves with it" if corr > 0 else "Moves against it"
+        else:
+            movement = "No reliable relationship"
+        rows.append({
+            "Ticker": ticker,
+            "Correlation": corr,
+            "Relationship": "Yes" if has_relationship else "No",
+            "Likely movement": movement,
+        })
+
+    return pd.DataFrame(rows).sort_values("Correlation", ascending=False, ignore_index=True)

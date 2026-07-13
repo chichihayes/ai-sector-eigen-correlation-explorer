@@ -3,10 +3,9 @@
 Pick a stock → an AI layer figures out which sectors/themes it belongs to
 → AI proposes peer stocks in that sector, validated and ranked by live
 market cap → recent price history is pulled for the group → PCA /
-eigen-decomposition runs on daily returns → an AI analyst summarizes what
-the correlation structure means: is the group moving as one block or
-independently, who's the bellwether, and whether smaller-cap names follow
-the large-cap leader or move on their own.
+eigen-decomposition runs on daily returns → the app answers one direct
+question: **if this stock moves, does the rest of the group move with
+it — yes or no, and which way?**
 
 ## How it works
 
@@ -29,13 +28,22 @@ the large-cap leader or move on their own.
    (numerically correct for symmetric matrices — the original notebook
    used plain `eig`, which is the wrong tool here and can return spurious
    tiny imaginary components).
-5. **AI narrative** (`core/ai_analyst.py`) — the numeric PCA results,
-   plus each ticker's real % price change over the fetch window, are sent
-   to an LLM for a plain-English writeup grounded in that actual trend
-   data rather than a hallucinated "current market conditions." If the
-   key is missing or the call fails, the app still shows every
-   numeric/chart result — this layer degrades gracefully rather than
-   crashing the app, same as sector/peer discovery.
+5. **Relationship call** (`core/pca_engine.py::relationship_table`) — for
+   every peer, its correlation with the target ticker is turned into a
+   direct, deterministic Yes/No: `|correlation| >= 0.5` means "yes, real
+   relationship" (direction from the sign); below that, "no reliable
+   relationship." No AI involved in this step — it's the actual data,
+   not a summary of it.
+6. **AI explanation** (`core/ai_analyst.py`) — the relationship table
+   (which tickers move with the target, against it, or not at all),
+   plus each ticker's real % price change over the fetch window, are
+   sent to an LLM for a short (≤80 word) plain-English answer to "if
+   this stock moves, what happens to the rest" — no analyst jargon, no
+   dispersion/bellwether framing, no compliance boilerplate, just the
+   direct answer grounded in the table above it. If the key is missing
+   or the call fails, the relationship table is unaffected — this layer
+   degrades gracefully rather than crashing the app, same as sector/peer
+   discovery.
 
 Both AI call sites go through one shared client, `core/openrouter_client.py`,
 so there's exactly one place that talks to OpenRouter.
@@ -72,9 +80,9 @@ flowchart TD
     H --> I["Top N peers (slider count)"]
     I --> K["yfinance: fetch_price_history for target + peers"]
     K --> L["pca_engine.run_pca<br/>covariance -> eigh -> eigenvalues/eigenvectors"]
-    L --> M["Correlation matrix, dominant ticker,<br/>explained variance, component loadings"]
-    M --> N["ai_analyst.generate_analysis<br/>(numeric results + real % price trend per ticker)"]
-    N --> O["Streamlit renders: heatmap, price chart,<br/>cap-tier table, loadings table, AI writeup"]
+    L --> M["pca_engine.relationship_table<br/>correlation -> Yes/No + direction per peer"]
+    M --> N["ai_analyst.generate_analysis<br/>(relationship table + real % price trend, short answer)"]
+    N --> O["Streamlit renders: relationship table, heatmap,<br/>price chart, loadings table, AI explanation"]
 ```
 
 ## Setup (VS Code / local)
