@@ -8,20 +8,6 @@ the correlation structure means: is the group moving as one block or
 independently, who's the bellwether, and whether smaller-cap names follow
 the large-cap leader or move on their own.
 
-Nothing about the sector universe is hardcoded. There's no reliable free
-API that answers "list every company in sector X," so instead of
-hand-maintaining that list, an LLM proposes candidates and every candidate
-is independently verified against live market data before it's trusted —
-if the AI hallucinates a ticker, it gets silently dropped, not shown to
-the user as fact.
-
-Rebuilt in stages from an earlier notebook prototype (2-stock, Alpha
-Vantage, hardcoded key, `eig` instead of `eigh`) into: N-stock groups,
-yfinance (no API key, no rate-limit stalls), live market-cap tiering, an
-environment-based key for the AI layer, and — this stage — AI-driven
-sector/peer discovery with a fully offline curated fallback if the AI
-layer is ever unavailable.
-
 ## How it works
 
 1. **Sector discovery** (`core/ai_discovery.py`) — given a ticker, an LLM
