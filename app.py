@@ -7,7 +7,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-from data.sector_map import find_sectors_for_ticker, peers_for_sector, all_known_tickers
 from core.data_fetcher import (
     yahoo_sector_hint,
     fetch_price_history,
@@ -65,13 +64,7 @@ with st.sidebar:
     st.header("Configuration")
     ticker_input = st.text_input("Stock ticker", value="NVDA").upper().strip()
 
-    ai_sectors = cached_identify_sectors(ticker_input) if ticker_input else []
-    if ai_sectors:
-        sector_source = "ai"
-        sector_options = ai_sectors
-    else:
-        sector_source = "curated"
-        sector_options = find_sectors_for_ticker(ticker_input) if ticker_input else []
+    sector_options = cached_identify_sectors(ticker_input) if ticker_input else []
 
     sector = None
     if sector_options:
@@ -83,17 +76,13 @@ with st.sidebar:
             if len(sector_options) > 1 else None,
         )
     elif ticker_input:
-        st.caption(f"Couldn't classify {ticker_input} into a sector yet.")
+        st.caption(f"AI couldn't classify {ticker_input} into a sector yet.")
 
     peer_count = 10
-    if sector_source == "ai" and sector:
+    if sector:
         peer_count = st.slider("Peers to compare", min_value=2, max_value=20, value=10)
 
     period = st.selectbox("History window", ["1mo", "3mo", "6mo", "1y", "2y"], index=2)
-    st.caption(
-        f"Offline fallback sectors (used if AI discovery is unavailable): "
-        f"{', '.join(all_known_tickers()[:12])} ..."
-    )
     run_button = st.button("Run Analysis", type="primary")
 
 if run_button and ticker_input:
@@ -102,45 +91,40 @@ if run_button and ticker_input:
             hint = yahoo_sector_hint(ticker_input)
         if hint:
             st.warning(
-                f"{ticker_input} maps to Yahoo sector '{hint}', but neither the AI layer "
-                f"nor the offline curated universe could build a peer group for it yet."
+                f"{ticker_input} maps to Yahoo sector '{hint}', but the AI layer "
+                f"couldn't build a peer group for it — try again or try a different ticker."
             )
         else:
             st.error(f"Couldn't resolve a sector for {ticker_input}. Try a different ticker.")
         st.stop()
 
-    candidate_caps = None
+    with st.spinner(f"AI is proposing peer stocks for '{sector}'..."):
+        candidates = cached_propose_sector_stocks(sector, exclude_ticker=ticker_input, limit=20)
 
-    if sector_source == "ai":
-        with st.spinner(f"AI is proposing peer stocks for '{sector}'..."):
-            candidates = cached_propose_sector_stocks(sector, exclude_ticker=ticker_input, limit=20)
+    if not candidates:
+        st.error(
+            f"AI couldn't build a peer list for '{sector}' — try a different sector "
+            f"from the dropdown, or a different ticker."
+        )
+        st.stop()
 
-        if not candidates:
-            st.error(
-                f"AI couldn't build a peer list for '{sector}' — try a different sector "
-                f"from the dropdown, or a different ticker."
-            )
-            st.stop()
+    with st.spinner("Validating candidates and ranking by market cap..."):
+        ranked = cached_validate_and_rank_candidates(candidates, exclude=ticker_input, limit=20)
 
-        with st.spinner("Validating candidates and ranking by market cap..."):
-            ranked = cached_validate_and_rank_candidates(candidates, exclude=ticker_input, limit=20)
+    if not ranked:
+        st.error(
+            f"None of the AI-proposed tickers for '{sector}' could be validated — "
+            f"try a different sector from the dropdown, or a different ticker."
+        )
+        st.stop()
 
-        if not ranked:
-            st.error(
-                f"None of the AI-proposed tickers for '{sector}' could be validated — "
-                f"try a different sector from the dropdown, or a different ticker."
-            )
-            st.stop()
-
-        ranked = ranked[:peer_count]
-        peers = {t: c for t, c in ranked}
-        candidate_caps = dict(ranked)
-    else:
-        peers = peers_for_sector(sector, exclude=ticker_input)
+    ranked = ranked[:peer_count]
+    peers = {t: c for t, c in ranked}
+    candidate_caps = dict(ranked)
 
     group_tickers = [ticker_input] + list(peers.keys())
 
-    st.subheader(f"Sector: {sector} ({'AI-discovered' if sector_source == 'ai' else 'curated'})")
+    st.subheader(f"Sector: {sector} (AI-discovered)")
     st.write(f"Analyzing **{ticker_input}** against {len(peers)} sector peers: "
              f"{', '.join(peers.keys())}")
 
@@ -156,13 +140,10 @@ if run_button and ticker_input:
         st.stop()
 
     with st.spinner("Fetching live market cap data..."):
-        if candidate_caps is not None:
-            caps = dict(candidate_caps)
-            missing = [t for t in prices.columns if t not in caps]
-            if missing:
-                caps.update(cached_fetch_market_caps(missing))
-        else:
-            caps = cached_fetch_market_caps(list(prices.columns))
+        caps = dict(candidate_caps)
+        missing = [t for t in prices.columns if t not in caps]
+        if missing:
+            caps.update(cached_fetch_market_caps(missing))
     cap_tiers = {t: cap_tier(caps.get(t)) for t in prices.columns}
 
     with st.spinner("Running PCA / eigen-decomposition..."):

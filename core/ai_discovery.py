@@ -1,13 +1,12 @@
 """
-AI-driven replacement for hand-maintaining data/sector_map.py: asks the LLM
-which sectors/themes a ticker belongs to, and which stocks belong to a
-given sector/theme. Open-ended — not limited to a fixed sector list.
+Asks the LLM which sectors/themes a ticker belongs to, and which stocks
+belong to a given sector/theme. Open-ended — not limited to a fixed
+sector list, nothing hardcoded.
 
 Both functions return an empty list on ANY failure (missing key, network
 error, bad/unparseable response) rather than raising, so the caller
-(app.py) can fall back to the curated data/sector_map.py flow without
-special-casing exceptions — the same degrade-gracefully philosophy as
-core/ai_analyst.py.
+(app.py) can show a clear error instead of crashing — the same
+degrade-gracefully philosophy as core/ai_analyst.py.
 """
 
 import json

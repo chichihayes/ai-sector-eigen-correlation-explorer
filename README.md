@@ -22,19 +22,14 @@ the large-cap leader or move on their own.
    ticker doesn't actually resolve, so it's dropped. Survivors are ranked
    by live market cap; a sidebar slider picks how many of the top-ranked
    ones to actually compare against (default 10).
-3. **Reliability fallback** (`data/sector_map.py`) — if the AI discovery
-   calls fail (missing key, network error, bad response) they return an
-   empty list rather than raising, and the app falls back to a small
-   hand-curated table of ~9 sectors with representative tickers. The app
-   never dead-ends just because the AI layer is down.
-4. **Price + market cap fetch** (`core/data_fetcher.py`) — yfinance, no
+3. **Price + market cap fetch** (`core/data_fetcher.py`) — yfinance, no
    key required, results cached (`st.cache_data`) to cut repeat calls.
-5. **PCA / eigen-decomposition** (`core/pca_engine.py`) — daily returns
+4. **PCA / eigen-decomposition** (`core/pca_engine.py`) — daily returns
    are centered and their covariance matrix eigen-decomposed via `eigh`
    (numerically correct for symmetric matrices — the original notebook
    used plain `eig`, which is the wrong tool here and can return spurious
    tiny imaginary components).
-6. **AI narrative** (`core/ai_analyst.py`) — the numeric PCA results,
+5. **AI narrative** (`core/ai_analyst.py`) — the numeric PCA results,
    plus each ticker's real % price change over the fetch window, are sent
    to an LLM for a plain-English writeup grounded in that actual trend
    data rather than a hallucinated "current market conditions." If the
@@ -62,8 +57,6 @@ graph LR
     Client -->|HTTPS| OpenRouter[(OpenRouter API)]
 
     Fetcher -->|no key needed| YFinance[(yfinance / Yahoo)]
-
-    UI -.fallback if AI discovery fails.-> SectorMap["data/sector_map.py<br/>curated sector → tickers"]
 ```
 
 ## Request flow (one "Run Analysis" click)
@@ -72,16 +65,12 @@ graph LR
 flowchart TD
     A["User enters ticker (e.g. NVDA)"] --> B["AI: identify_sectors(ticker)"]
     B -->|sectors returned| C["Sidebar: sector dropdown + peer-count slider"]
-    B -->|AI unavailable, empty list| D["Fallback: sector_map.find_sectors_for_ticker"]
-    D --> C
+    B -->|AI unavailable, empty list| Z["Clear error shown, analysis stops"]
     C --> E["User picks a sector, clicks Run Analysis"]
-    E --> F{"Which sector source?"}
-    F -->|AI-discovered| G["AI: propose_sector_stocks(sector)"]
+    E --> G["AI: propose_sector_stocks(sector)"]
     G --> H["yfinance: validate_and_rank_candidates<br/>(drop unresolvable tickers, rank by market cap)"]
     H --> I["Top N peers (slider count)"]
-    F -->|curated fallback| J["sector_map.peers_for_sector(sector)"]
     I --> K["yfinance: fetch_price_history for target + peers"]
-    J --> K
     K --> L["pca_engine.run_pca<br/>covariance -> eigh -> eigenvalues/eigenvectors"]
     L --> M["Correlation matrix, dominant ticker,<br/>explained variance, component loadings"]
     M --> N["ai_analyst.generate_analysis<br/>(numeric results + real % price trend per ticker)"]
@@ -108,9 +97,9 @@ streamlit run app.py
 ```
 
 Streamlit opens automatically at **http://localhost:8501**. Without an
-`OPENROUTER_API_KEY`, the app still fully works — sector/peer discovery
-and the AI writeup degrade to the curated fallback / a clear "unavailable"
-message instead of crashing.
+`OPENROUTER_API_KEY`, sector/peer discovery and the AI writeup can't run —
+the app shows a clear error instead of crashing, but a key is required to
+actually use it, since there's no offline data source behind it.
 
 ## Deploying (free)
 
@@ -133,8 +122,6 @@ calls would routinely exceed.
 
 ## Extending it
 
-- **Add a curated fallback sector or more peers**: edit
-  `data/sector_map.py` (only used when AI discovery is unavailable).
 - **Swap the AI model**: change `MODEL` in `core/openrouter_client.py` to
   any OpenRouter-supported model string.
 - **Change how many candidate peers the AI proposes**: adjust the

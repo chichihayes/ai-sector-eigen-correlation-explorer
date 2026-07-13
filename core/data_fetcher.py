@@ -7,21 +7,16 @@ time.sleep(12) between every request). This is the main reason to switch:
 it's faster, keyless, and doesn't fail silently when a rate limit is hit.
 """
 
-import sys
 import time
 import pandas as pd
 import yfinance as yf
 
-sys.path.append("..")
-from data.sector_map import peers_for_sector
-
 
 def yahoo_sector_hint(ticker: str) -> str | None:
     """
-    Fall back to yfinance's own 'sector' field to *report* an unmatched
-    ticker's sector to the user — informational only, since we don't build
-    a peer group from it (no curated universe for arbitrary Yahoo sector
-    strings).
+    Yahoo's own 'sector' field, used to *report* what sector an unresolved
+    ticker is in — informational only, shown when AI discovery can't build
+    a peer group for it.
     """
     try:
         info = yf.Ticker(ticker).info
@@ -62,9 +57,8 @@ def fetch_price_history(tickers: list[str], period: str = "6mo") -> pd.DataFrame
 
 def fetch_market_caps(tickers: list[str]) -> dict[str, float]:
     """
-    Live market cap per ticker in USD, used for the actual big-vs-small
-    classification shown in the app (the static LARGE/MID/SMALL labels in
-    sector_map.py are only a curation-time hint, not live truth).
+    Live market cap per ticker in USD, used both for big-vs-small
+    classification and to rank/validate AI-proposed candidate tickers.
     """
     caps = {}
     for t in tickers:
